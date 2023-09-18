@@ -76,6 +76,7 @@ function renderButton() {
     translationButton.addEventListener("mousedown", buttonClickHandler);
     translationButton.addEventListener("contextmenu", (e) => e.preventDefault());
 }
+
 translationButtonContainer.addEventListener("load", renderButton);
 
 let originScrollX = 0; // record the original scroll X position(before scroll event)
@@ -99,9 +100,35 @@ chrome.storage.onChanged.addListener((changes, area) => {
     ButtonPositionSetting = changes.LayoutSettings.newValue.SelectTranslatePosition;
 });
 
+function ignoreNode(node, cb) {
+    while (node.parentNode) {
+        console.log(node.parentNode);
+        if (node.className.includes('simplebar')) {
+            console.log('its simple bar')
+            return true;
+        }
+        node = node.parentNode;
+    }
+    console.log('its NOT simple bar')
+    cb()
+    return false;
+}
+
+
+function wrapWordsWithSpan(node) {
+    let textNodes = node.innerText.split(' ');
+    node.innerHTML = '';
+    textNodes.forEach(word => {
+        let span = document.createElement('span');
+        span.innerText = word + ' ';
+        node.appendChild(span);
+    });
+}
+
 // this listener activated when document content is loaded
 // to make selection button available ASAP
 window.addEventListener("DOMContentLoaded", () => {
+    if (!document.location.hostname.endsWith('.nl')) return false
     // the scrolling elements in pdf files are different from normal web pages
     if (isPDFjsPDFViewer()) {
         // #viewerContainer element is the scrolling element in a pdf file
@@ -112,24 +139,31 @@ window.addEventListener("DOMContentLoaded", () => {
     // to make the selection icon move with the mouse scrolling
     scrollingElement.addEventListener("scroll", scrollHandler);
 
-    document.addEventListener("mousedown", () => {
-        disappearButton();
+    document.addEventListener("mousedown", (e) => {
+        ignoreNode(e.target, () => wrapWordsWithSpan(e.target));
         // whether user take a select action
-        detectSelect(document, (event) => {
-            selectTranslate(event);
-        });
+        // detectSelect(document, (event) => {
+        //     selectTranslate(e);
+        // });
     });
 
-    document.addEventListener("dblclick", (event) => {
-        selectTranslate(event, true);
+    document.addEventListener("mouseup", (e) => {
+        // console.log(e)
+        // e.target.select();
+        // selectTranslate(e);
+        ignoreNode(e.target, () => e.target.textContent.trim() && channel.request("translate", {text: e.target.textContent}))
     });
 
-    document.addEventListener("click", (event) => {
-        // triple click
-        if (event.detail === 3) {
-            selectTranslate(event, true);
-        }
-    });
+    // document.addEventListener("dblclick", (event) => {
+    //     selectTranslate(event, true);
+    // });
+    //
+    // document.addEventListener("click", (event) => {
+    //     // triple click
+    //     if (event.detail === 3) {
+    //         selectTranslate(event, true);
+    //     }
+    // });
 
     /**
      * implement the select translate feature
@@ -252,7 +286,7 @@ function getSelection() {
             position = [rect.left, rect.top];
         }
     }
-    return { text, position };
+    return {text, position};
 }
 
 /**
@@ -409,7 +443,7 @@ function getInnerParent(container) {
 
     if (container.shadowRoot) return container.shadowRoot;
 
-    container.attachShadow({ mode: "open" });
+    container.attachShadow({mode: "open"});
     return container.shadowRoot;
 }
 
